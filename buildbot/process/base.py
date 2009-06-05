@@ -326,18 +326,6 @@ class Build:
         self.setupSlaveBuilder(slavebuilder)
         slavebuilder.slave.updateSlaveStatus(buildStarted=build_status)
 
-        # convert all locks into their real forms
-        lock_list = []
-        for access in self.locks:
-            if not isinstance(access, locks.LockAccess):
-                # Buildbot 0.7.7 compability: user did not specify access
-                access = access.defaultAccess()
-            lock = self.builder.botmaster.getLockByID(access.lockid)
-            lock_list.append((lock, access))
-        self.locks = lock_list
-        # then narrow SlaveLocks down to the right slave
-        self.locks = [(l.getLock(self.slavebuilder), la)
-                       for l, la in self.locks]
         self.remote = slavebuilder.remote
         self.remote.notifyOnDisconnect(self.lostRemote)
         d = self.deferred = defer.Deferred()

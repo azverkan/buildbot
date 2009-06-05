@@ -52,10 +52,15 @@ class AbstractSlaveBuilder(pb.Referenceable):
             return oldversion
         return self.remoteCommands.get(command)
 
-    def isAvailable(self):
+    def isAvailable(self, locks):
         # if this SlaveBuilder is busy, then it's definitely not available
         if self.isBusy():
             return False
+
+        # if all of the global locks are filled, then it's not available
+        for lock, access in locks:
+            if not lock.isAvailable(access):
+                return False
 
         # otherwise, check in with the BuildSlave
         if self.slave:
@@ -675,6 +680,19 @@ class Builder(pb.Referenceable):
             self.builder_status.setBigState("idle")
             self.fireTestEvent('idle')
 
+    def convertLockList(self, slavebuilder):
+        # convert all locks into their real forms
+        lock_list = []
+        for access in self.locks:
+            if not isinstance(access, locks.LockAccess):
+                # Buildbot 0.7.7 compability: user did not specify access
+                access = access.defaultAccess()
+            lock = self.builder.botmaster.getLockByID(access.lockid)
+            lock_list.append((lock, access))
+
+        # then narrow SlaveLocks down to the right slave
+        return [(l.getLock(slavebuilder), la) for l, la in lock_list]
+
     def maybeStartBuild(self):
         log.msg("maybeStartBuild %s: %s %s" %
                 (self, self.buildable, self.slaves))
@@ -682,8 +700,8 @@ class Builder(pb.Referenceable):
             self.updateBigStatus()
             return # nothing to do
 
-        # pick an idle slave
-        available_slaves = [sb for sb in self.slaves if sb.isAvailable()]
+        # filter idle and unlocked slaves
+        available_slaves = [sb for sb in self.slaves if sb.isAvailable(self.convertLockList(sb))]
         if not available_slaves:
             log.msg("%s: want to start build, but we don't have a remote"
                     % self)
@@ -739,7 +757,7 @@ class Builder(pb.Referenceable):
         # builder.
         build = self.buildFactory.newBuild(requests)
         build.setBuilder(self)
-        build.setLocks(self.locks)
+        build.setLocks(self.convertLockList(self.locks))
         if len(self.env) > 0:
             build.setSlaveEnvironment(self.env)
 
