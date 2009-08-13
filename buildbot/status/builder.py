@@ -955,6 +955,11 @@ class BuildStepStatus(styles.Versioned):
                     loog_deferred = loog.compressLog()
                     if loog_deferred:
                         cld.append(loog_deferred)
+                else:
+                    # remove old compressed logs if they exist from a previous
+                    # build and buildbot is no longer aware of them
+                    if os.path.exists(loog.getFilename() + ".bz2"):
+                        _tryremove(loog.getFilename() + ".bz2", 1, 5)
 
         for r in self.updates.keys():
             if self.updates[r] is not None:
